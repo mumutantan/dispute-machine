@@ -152,19 +152,30 @@ export class DisputesService {
       throw new Error('参与方不存在')
     }
 
-    if (participant.choice) {
+    if (participant.choice && participant.choice !== '') {
       throw new Error('已提交过选择')
     }
 
     this.db.run("UPDATE disputes SET status = 'playing' WHERE id = ? AND status = 'pending'", [disputeId])
-    this.db.run('UPDATE participants SET choice = ? WHERE id = ?', [data.choice, data.participantId])
 
-    // 检查是否所有人都选了
+    // 对于骰子模式，空字符串表示让系统随机，用 "auto" 标记
+    const actualChoice = (dispute.type === 'luck_dice' && (!data.choice || data.choice === ''))
+      ? 'auto'
+      : data.choice
+    this.db.run('UPDATE participants SET choice = ? WHERE id = ?', [actualChoice, data.participantId])
+
+    // 重新查询当前玩家，确保拿到最新状态（sql.js 可能有缓存问题）
+    const currentParticipant = this.db.prepare(
+      'SELECT * FROM participants WHERE id = ? AND dispute_id = ?'
+    ).get(data.participantId, disputeId) as ParticipantRow | undefined
+
+    // 重新查询所有参与者，确保拿到最新数据
     const allParticipants = this.db.prepare(
       'SELECT * FROM participants WHERE dispute_id = ?'
     ).all(disputeId) as ParticipantRow[]
 
-    const allChosen = allParticipants.every(p => p.choice !== '')
+    // 对于骰子模式，"auto" 也算已选择
+    const allChosen = allParticipants.every(p => p.choice && p.choice !== '')
 
     if (allChosen) {
       const result = this.resolveGame(disputeId, dispute.type, allParticipants)
@@ -316,8 +327,14 @@ export class DisputesService {
    */
   private resolveDice(disputeId: string, participants: ParticipantRow[]) {
     const choices = participants.map(p => {
-      const val = parseInt(p.choice, 10)
-      const value = isNaN(val) ? Math.floor(Math.random() * 6) + 1 : val
+      // "auto" 或空字符串表示系统随机
+      let value: number
+      if (p.choice === 'auto' || p.choice === '') {
+        value = Math.floor(Math.random() * 6) + 1
+      } else {
+        const val = parseInt(p.choice, 10)
+        value = isNaN(val) ? Math.floor(Math.random() * 6) + 1 : val
+      }
       return { id: p.id, name: p.name, choice: String(value), value }
     })
 
@@ -366,7 +383,7 @@ export class DisputesService {
       throw new Error('选项不存在')
     }
 
-    if (participant.choice) {
+    if (participant.choice && participant.choice !== '') {
       throw new Error('已投过票')
     }
 
@@ -377,7 +394,7 @@ export class DisputesService {
       'SELECT * FROM participants WHERE dispute_id = ?'
     ).all(disputeId) as ParticipantRow[]
 
-    const allVoted = allParticipants.every(p => p.choice !== '')
+    const allVoted = allParticipants.every(p => p.choice && p.choice !== '')
 
     if (allVoted) {
       const result = this.resolveVote(disputeId, allParticipants)

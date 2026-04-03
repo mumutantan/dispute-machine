@@ -7,134 +7,192 @@
       @click-left="onBack"
     />
 
-    <!-- 争端标题 -->
-    <div class="dispute-title" v-if="disputeTitle">
-      <van-icon name="fire" />
-      <span>{{ disputeTitle }}</span>
+    <!-- Loading -->
+    <div v-if="loading" class="loading-container">
+      <van-loading size="48px">加载中...</van-loading>
     </div>
 
-    <!-- 对决区域 -->
-    <div class="battle-area">
-      <!-- 玩家1 -->
-      <div class="player-zone player1">
-        <div class="player-header">
-          <van-icon name="user-o" size="24" />
-          <span>玩家 1</span>
-        </div>
-        <van-field
-          v-model="player1.name"
-          placeholder="输入名字"
-          class="name-input"
-          clearable
-        />
-        <div class="choice-area">
-          <div
-            v-for="choice in choices"
-            :key="choice.value"
-            class="choice-btn"
-            :class="{ active: player1.choice === choice.value, shaking: isShaking && player1.choice === choice.value }"
-            @click="selectChoice(1, choice.value)"
+    <!-- 错误提示 -->
+    <div v-else-if="error" class="error-container">
+      <van-empty :description="error" />
+      <van-button type="primary" @click="loadDispute">重试</van-button>
+    </div>
+
+    <!-- 主内容 -->
+    <template v-else>
+      <!-- 争端标题 -->
+      <div class="dispute-title" v-if="dispute?.title">
+        <van-icon name="fire" />
+        <span>{{ dispute.title }}</span>
+      </div>
+
+      <!-- 参与方不足提示 -->
+      <div v-if="dispute.participants?.length < 2" class="join-section">
+        <van-notice-bar text="需要至少2人参与，请先加入" left-icon="warning" />
+        
+        <div class="join-form">
+          <van-cell-group inset>
+            <van-field
+              v-model="joinName"
+              placeholder="输入你的名字"
+              clearable
+            />
+          </van-cell-group>
+          <van-button
+            type="primary"
+            size="large"
+            round
+            :loading="isJoining"
+            @click="joinGame"
+            class="join-btn"
           >
-            <span class="choice-emoji">{{ choice.emoji }}</span>
-            <span class="choice-text">{{ choice.label }}</span>
+            加入游戏
+          </van-button>
+        </div>
+      </div>
+
+      <!-- 对决区域 -->
+      <div class="battle-area" v-else>
+        <!-- 玩家1 -->
+        <div class="player-zone player1">
+          <div class="player-header">
+            <van-icon name="user-o" size="24" />
+            <span>{{ dispute.participants[0]?.name || '玩家 1' }}</span>
+          </div>
+          <div class="choice-area">
+            <div
+              v-for="choice in choices"
+              :key="choice.value"
+              class="choice-btn"
+              :class="{
+                active: player1Choice === choice.value,
+                disabled: hasSubmitted && player1Choice !== choice.value
+              }"
+              @click="selectChoice(choice.value)"
+            >
+              <span class="choice-emoji">{{ choice.emoji }}</span>
+              <span class="choice-text">{{ choice.label }}</span>
+            </div>
+          </div>
+          <div v-if="player1Choice" class="selected-choice">
+            已选择: {{ getChoiceName(player1Choice) }}
+          </div>
+        </div>
+
+        <!-- VS -->
+        <div class="vs-section">
+          <div class="vs-text">VS</div>
+        </div>
+
+        <!-- 玩家2 -->
+        <div class="player-zone player2">
+          <div class="player-header">
+            <van-icon name="user-o" size="24" />
+            <span>{{ dispute.participants[1]?.name || '玩家 2' }}</span>
+          </div>
+          <div class="choice-area">
+            <div
+              v-for="choice in choices"
+              :key="choice.value"
+              class="choice-btn"
+              :class="{
+                active: player2Choice === choice.value,
+                disabled: hasSubmitted && player2Choice !== choice.value
+              }"
+              @click="selectChoice(choice.value)"
+            >
+              <span class="choice-emoji">{{ choice.emoji }}</span>
+              <span class="choice-text">{{ choice.label }}</span>
+            </div>
+          </div>
+          <div v-if="player2Choice" class="selected-choice">
+            已选择: {{ getChoiceName(player2Choice) }}
           </div>
         </div>
       </div>
 
-      <!-- VS -->
-      <div class="vs-section">
-        <div class="vs-text">VS</div>
+      <!-- 确认按钮 -->
+      <div class="battle-action" v-if="dispute?.participants?.length >= 2 && !showResult">
+        <van-button
+          type="primary"
+          size="large"
+          round
+          :disabled="!canPlay"
+          @click="submitChoice"
+          class="battle-btn"
+        >
+          {{ player1Choice && player2Choice ? '⚔️ 开战' : '请双方选择手势' }}
+        </van-button>
       </div>
 
-      <!-- 玩家2 -->
-      <div class="player-zone player2">
-        <div class="player-header">
-          <van-icon name="user-o" size="24" />
-          <span>玩家 2</span>
-        </div>
-        <van-field
-          v-model="player2.name"
-          placeholder="输入名字"
-          class="name-input"
-          clearable
-        />
-        <div class="choice-area">
-          <div
-            v-for="choice in choices"
-            :key="choice.value"
-            class="choice-btn"
-            :class="{ active: player2.choice === choice.value, shaking: isShaking && player2.choice === choice.value }"
-            @click="selectChoice(2, choice.value)"
-          >
-            <span class="choice-emoji">{{ choice.emoji }}</span>
-            <span class="choice-text">{{ choice.label }}</span>
+      <!-- 结果展示 -->
+      <div class="result-section" v-if="showResult" :class="{ 'show': showResult }">
+        <div class="result-title">{{ resultText }}</div>
+        
+        <div class="result-choices">
+          <div class="result-choice" :class="{ winner: result?.winner === 1 }">
+            <div class="choice-display">{{ getChoiceEmoji(player1Choice) }}</div>
+            <div class="choice-name">{{ player1Choice ? getChoiceName(player1Choice) : '-' }}</div>
+            <div class="player-name">{{ dispute.participants[0]?.name || '玩家1' }}</div>
+          </div>
+          
+          <div class="result-vs">VS</div>
+          
+          <div class="result-choice" :class="{ winner: result?.winner === 2 }">
+            <div class="choice-display">{{ getChoiceEmoji(player2Choice) }}</div>
+            <div class="choice-name">{{ player2Choice ? getChoiceName(player2Choice) : '-' }}</div>
+            <div class="player-name">{{ dispute.participants[1]?.name || '玩家2' }}</div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 开战按钮 -->
-    <div class="battle-action" v-if="!showResult">
-      <van-button
-        type="primary"
-        size="large"
-        round
-        :disabled="!canStart"
-        @click="startBattle"
-        class="battle-btn"
-      >
-        ⚔️ 开战
-      </van-button>
-    </div>
-
-    <!-- 结果展示 -->
-    <div class="result-section" v-if="showResult" :class="{ 'show': showResult }">
-      <div class="result-title">{{ resultText }}</div>
-      
-      <div class="result-choices">
-        <div class="result-choice" :class="{ winner: result.winner === 1 }">
-          <div class="choice-display">{{ getChoiceEmoji(player1.choice) }}</div>
-          <div class="choice-name">{{ player1.choice ? getChoiceName(player1.choice) : '-' }}</div>
-          <div class="player-name">{{ player1.name || '玩家1' }}</div>
+        <div class="winner-banner" v-if="result?.winner !== 0">
+          🏆 {{ result?.winner === 1 ? dispute.participants[0]?.name : dispute.participants[1]?.name }} 获胜！
         </div>
-        
-        <div class="result-vs">VS</div>
-        
-        <div class="result-choice" :class="{ winner: result.winner === 2 }">
-          <div class="choice-display">{{ getChoiceEmoji(player2.choice) }}</div>
-          <div class="choice-name">{{ player2.choice ? getChoiceName(player2.choice) : '-' }}</div>
-          <div class="player-name">{{ player2.name || '玩家2' }}</div>
+        <div class="winner-banner draw" v-else>
+          🤝 平局！
         </div>
-      </div>
 
-      <div class="winner-banner" v-if="result.winner !== 0">
-        🏆 {{ result.winner === 1 ? (player1.name || '玩家1') : (player2.name || '玩家2') }} 获胜！
+        <van-button
+          type="primary"
+          size="large"
+          round
+          @click="resetBattle"
+          class="reset-btn"
+        >
+          🔄 再来一局
+        </van-button>
       </div>
-      <div class="winner-banner draw" v-else>
-        🤝 平局！
-      </div>
-
-      <van-button
-        type="primary"
-        size="large"
-        round
-        @click="resetBattle"
-        class="reset-btn"
-      >
-        🔄 再来一局
-      </van-button>
-    </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { showToast, showLoadingToast, closeToast } from 'vant'
+import { getDispute, joinDispute, submitPlay, getResult } from '@/api'
 
 const router = useRouter()
+const route = useRoute()
 
-const disputeTitle = ref('谁请客？')
+const disputeId = computed(() => route.params.id as string)
+
+const loading = ref(true)
+const error = ref('')
+const isJoining = ref(false)
+const joinName = ref('')
+
+const dispute = ref<any>(null)
+const player1Choice = ref<string | null>(null)
+const player2Choice = ref<string | null>(null)
+
+const showResult = ref(false)
+const result = ref<any>(null)
+
+const hasSubmitted = computed(() => {
+  if (!dispute.value?.participants) return false
+  return dispute.value.participants.some((p: any) => p.choice)
+})
 
 const choices = [
   { value: 'rock', label: '石头', emoji: '✊' },
@@ -142,38 +200,22 @@ const choices = [
   { value: 'paper', label: '布', emoji: '✋' }
 ]
 
-const player1 = reactive({
-  name: '',
-  choice: null as 'rock' | 'scissors' | 'paper' | null
-})
-
-const player2 = reactive({
-  name: '',
-  choice: null as 'rock' | 'scissors' | 'paper' | null
-})
-
-const isShaking = ref(false)
-const showResult = ref(false)
-const result = reactive({
-  winner: 0 as 0 | 1 | 2
-})
-
-const canStart = computed(() => {
-  return player1.choice && player2.choice
+const canPlay = computed(() => {
+  return player1Choice.value && player2Choice.value
 })
 
 const resultText = computed(() => {
-  if (result.winner === 0) return '势均力敌！'
+  if (result.value?.winner === 0) return '势均力敌！'
   return '胜负已分！'
 })
 
-const getChoiceEmoji = (choice: 'rock' | 'scissors' | 'paper' | null) => {
+const getChoiceEmoji = (choice: string | null) => {
   if (!choice) return '❓'
   const found = choices.find(c => c.value === choice)
   return found?.emoji || '❓'
 }
 
-const getChoiceName = (choice: 'rock' | 'scissors' | 'paper' | null) => {
+const getChoiceName = (choice: string | null) => {
   if (!choice) return ''
   const found = choices.find(c => c.value === choice)
   return found?.label || ''
@@ -183,61 +225,117 @@ const onBack = () => {
   router.back()
 }
 
-const selectChoice = (player: 1 | 2, choice: 'rock' | 'scissors' | 'paper') => {
+const loadDispute = async () => {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const data = await getDispute(disputeId.value)
+    dispute.value = data
+
+    // 已有选择时恢复状态
+    if (data.participants && data.participants.length >= 2) {
+      player1Choice.value = data.participants[0]?.choice || null
+      player2Choice.value = data.participants[1]?.choice || null
+
+      // 双方都已选择，查询结果
+      if (player1Choice.value && player2Choice.value) {
+        const resultData = await getResult(disputeId.value)
+        result.value = resultData
+        showResult.value = true
+      }
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.message || '加载失败，请重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+const joinGame = async () => {
+  if (!joinName.value.trim()) {
+    showToast('请输入名字')
+    return
+  }
+
+  isJoining.value = true
+
+  try {
+    const data = await joinDispute(disputeId.value, { name: joinName.value.trim() })
+    dispute.value = data
+    showToast('加入成功')
+  } catch (e: any) {
+    showToast(e.response?.data?.message || '加入失败')
+  } finally {
+    isJoining.value = false
+  }
+}
+
+const selectChoice = async (choice: string) => {
   if (showResult.value) return
-  
-  if (player === 1) {
-    player1.choice = choice
-  } else {
-    player2.choice = choice
-  }
-}
-
-const startBattle = () => {
-  if (!canStart.value) {
-    showToast('请双方都选择手势')
+  if (!dispute.value?.participants || dispute.value.participants.length < 2) {
+    showToast('等待更多玩家加入')
     return
   }
 
-  isShaking.value = true
-  
-  // 动画效果后显示结果
-  setTimeout(() => {
-    isShaking.value = false
-    calculateResult()
-    showResult.value = true
-  }, 1000)
+  // 确定是哪个玩家
+  const myIndex = 0 // 简单假设第一个是当前玩家
+  const participantId = dispute.value.participants[myIndex]?.id
+  if (!participantId) return
+
+  showLoadingToast({ message: '提交中...', forbidClick: true })
+
+  try {
+    await submitPlay(disputeId.value, {
+      participantId,
+      choice
+    })
+
+    // 更新本地状态
+    if (myIndex === 0) {
+      player1Choice.value = choice as 'rock' | 'scissors' | 'paper'
+    } else {
+      player2Choice.value = choice as 'rock' | 'scissors' | 'paper'
+    }
+
+    // 刷新数据
+    const data = await getDispute(disputeId.value)
+    dispute.value = data
+    player1Choice.value = data.participants[0]?.choice || null
+    player2Choice.value = data.participants[1]?.choice || null
+
+    // 双方都选了，获取结果
+    if (player1Choice.value && player2Choice.value) {
+      const resultData = await getResult(disputeId.value)
+      result.value = resultData
+      showResult.value = true
+    }
+
+    closeToast()
+  } catch (e: any) {
+    closeToast()
+    showToast(e.response?.data?.message || '提交失败')
+  }
 }
 
-const calculateResult = () => {
-  const p1 = player1.choice
-  const p2 = player2.choice
-
-  if (p1 === p2) {
-    result.winner = 0
-    return
-  }
-
-  // 赢的条件
-  const wins: Record<string, string> = {
-    rock: 'scissors',
-    scissors: 'paper',
-    paper: 'rock'
-  }
-
-  if (wins[p1!] === p2) {
-    result.winner = 1
-  } else {
-    result.winner = 2
-  }
+const submitChoice = async () => {
+  // 这个按钮保留但实际上选择时自动提交
+  showToast('请选择你的手势')
 }
 
-const resetBattle = () => {
-  player1.choice = null
-  player2.choice = null
+const resetBattle = async () => {
+  player1Choice.value = null
+  player2Choice.value = null
   showResult.value = false
-  result.winner = 0
+  result.value = null
+  
+  // 刷新数据
+  await loadDispute()
 }
+
+onMounted(() => {
+  loadDispute()
+})
 </script>
 
 <style scoped>
@@ -245,6 +343,16 @@ const resetBattle = () => {
   min-height: 100vh;
   background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
   padding-bottom: 30px;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
 }
 
 .dispute-title {
@@ -257,6 +365,20 @@ const resetBattle = () => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.join-section {
+  padding: 20px;
+}
+
+.join-form {
+  margin-top: 20px;
+}
+
+.join-btn {
+  margin-top: 16px;
+  height: 50px;
+  font-size: 18px;
 }
 
 .battle-area {
@@ -282,21 +404,6 @@ const resetBattle = () => {
   font-size: 16px;
   font-weight: 600;
   margin-bottom: 12px;
-}
-
-.name-input {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  margin-bottom: 16px;
-}
-
-.name-input :deep(.van-field__control) {
-  color: #fff;
-  text-align: center;
-}
-
-.name-input :deep(.van-field__control::placeholder) {
-  color: rgba(255, 255, 255, 0.5);
 }
 
 .choice-area {
@@ -327,14 +434,9 @@ const resetBattle = () => {
   border-color: #ffd700;
 }
 
-.choice-btn.shaking {
-  animation: shake 0.5s ease-in-out;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-10px) rotate(-5deg); }
-  75% { transform: translateX(10px) rotate(5deg); }
+.choice-btn.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .choice-emoji {
@@ -344,6 +446,12 @@ const resetBattle = () => {
 .choice-text {
   font-size: 14px;
   color: #fff;
+}
+
+.selected-choice {
+  margin-top: 12px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .vs-section {

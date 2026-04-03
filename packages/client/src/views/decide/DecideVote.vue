@@ -7,182 +7,191 @@
       @click-left="onBack"
     />
 
-    <!-- 决定信息 -->
-    <div class="decision-info">
-      <h2 class="decision-title">{{ decision.title || '决定标题' }}</h2>
-      <p class="decision-desc" v-if="decision.description">{{ decision.description }}</p>
+    <!-- Loading -->
+    <div v-if="loading" class="loading-container">
+      <van-loading size="48px">加载中...</van-loading>
     </div>
 
-    <!-- 参与者信息 -->
-    <div class="participant-section">
-      <van-cell-group inset>
-        <van-field
-          v-model="participantName"
-          label="参与者"
-          placeholder="请输入你的名字"
-          clearable
-        />
-      </van-cell-group>
+    <!-- 错误提示 -->
+    <div v-else-if="error" class="error-container">
+      <van-empty :description="error" />
+      <van-button type="primary" @click="loadDispute">重试</van-button>
     </div>
 
-    <!-- 选项列表 -->
-    <div class="options-section">
-      <h3 class="section-title">请选择</h3>
-      
-      <div class="options-list">
-        <div
-          v-for="option in decision.options"
-          :key="option.id"
-          class="option-card"
-          :class="{
-            selected: selectedOptionId === option.id,
-            winner: showResult && option.isWinner
-          }"
-          @click="selectOption(option)"
-        >
-          <div class="option-content">
-            <div class="option-text">{{ option.text }}</div>
-            <div class="option-weight" v-if="option.weight > 1">
-              权重 ×{{ option.weight }}
+    <template v-else>
+      <!-- 决定信息 -->
+      <div class="decision-info">
+        <h2 class="decision-title">{{ dispute?.title || '决定标题' }}</h2>
+        <p class="decision-desc" v-if="dispute?.description">{{ dispute.description }}</p>
+      </div>
+
+      <!-- 未加入时显示加入入口 -->
+      <div v-if="!hasJoined" class="join-section">
+        <van-cell-group inset>
+          <van-field
+            v-model="joinName"
+            label="你的名字"
+            placeholder="请输入你的名字"
+            clearable
+          />
+        </van-cell-group>
+        <div class="join-action">
+          <van-button
+            type="primary"
+            size="large"
+            round
+            :loading="isJoining"
+            @click="joinVote"
+            class="join-btn"
+          >
+            加入投票
+          </van-button>
+        </div>
+      </div>
+
+      <!-- 已加入，显示选项 -->
+      <template v-if="hasJoined">
+        <!-- 选项列表 -->
+        <div class="options-section" v-if="!showResult">
+          <h3 class="section-title">请选择</h3>
+          
+          <div class="options-list">
+            <div
+              v-for="option in dispute?.options"
+              :key="option.id"
+              class="option-card"
+              :class="{ selected: selectedOptionId === option.id }"
+              @click="selectOption(option)"
+            >
+              <div class="option-content">
+                <div class="option-text">{{ option.text }}</div>
+              </div>
+              <div class="option-check">
+                <van-icon v-if="selectedOptionId === option.id" name="success" />
+              </div>
             </div>
           </div>
-          <div class="option-check">
-            <van-icon v-if="selectedOptionId === option.id" name="success" />
-          </div>
         </div>
-      </div>
-    </div>
 
-    <!-- 结果展示 -->
-    <div class="result-section" v-if="showResult">
-      <div class="result-header">
-        <h3>📊 投票结果</h3>
-      </div>
+        <!-- 已投票提示 -->
+        <div v-if="!showResult && hasVoted" class="voted-notice">
+          <van-notice-bar text="你已完成投票，等待其他人投完" left-icon="passed" />
+          <van-button
+            plain
+            type="primary"
+            size="small"
+            round
+            @click="checkResult"
+            :loading="isCheckingResult"
+            class="check-btn"
+          >
+            查看结果
+          </van-button>
+        </div>
 
-      <div class="result-chart">
-        <div
-          v-for="option in sortedResults"
-          :key="option.id"
-          class="result-bar"
-          :class="{ winner: option.isWinner }"
-        >
-          <div class="bar-label">
-            {{ option.text }}
+        <!-- 结果展示 -->
+        <div class="result-section" v-if="showResult">
+          <div class="result-header">
+            <h3>📊 投票结果</h3>
           </div>
-          <div class="bar-wrapper">
+
+          <div class="result-chart" v-if="resultOptions.length">
             <div
-              class="bar-fill"
-              :style="{ width: option.percentage + '%' }"
-            ></div>
-            <div class="bar-value">{{ option.percentage }}%</div>
+              v-for="option in sortedResults"
+              :key="option.id"
+              class="result-bar"
+              :class="{ winner: option.isWinner }"
+            >
+              <div class="bar-label">
+                {{ option.text }}
+              </div>
+              <div class="bar-wrapper">
+                <div
+                  class="bar-fill"
+                  :style="{ width: (option.percentage || 0) + '%' }"
+                ></div>
+                <div class="bar-value">{{ option.percentage || 0 }}%</div>
+              </div>
+            </div>
           </div>
+
+          <div class="winner-announcement" v-if="winnerOption">
+            🏆 {{ winnerOption.text }} 胜出！
+          </div>
+        </template>
+
+        <!-- 底部按钮 -->
+        <div class="bottom-actions" v-if="!showResult && !hasVoted">
+          <van-button
+            type="primary"
+            size="large"
+            round
+            :loading="isSubmitting"
+            :disabled="!canSubmit"
+            @click="submitVote"
+            class="submit-btn"
+          >
+            确认投票
+          </van-button>
         </div>
-      </div>
 
-      <div class="winner-announcement" v-if="winnerOption">
-        🏆 {{ winnerOption.text }} 胜出！
-      </div>
-
-      <div class="vote-summary">
-        <p>总投票权重：{{ totalWeight }} / {{ totalPossibleWeight }}</p>
-      </div>
-    </div>
-
-    <!-- 底部按钮 -->
-    <div class="bottom-actions" v-if="!showResult">
-      <van-button
-        type="primary"
-        size="large"
-        round
-        :loading="isSubmitting"
-        :disabled="!canSubmit"
-        @click="submitVote"
-        class="submit-btn"
-      >
-        确认投票
-      </van-button>
-    </div>
-
-    <div class="bottom-actions" v-else>
-      <van-button
-        type="primary"
-        size="large"
-        round
-        @click="resetVote"
-        class="reset-btn"
-      >
-        🔄 重新投票
-      </van-button>
-    </div>
+        <div class="bottom-actions" v-if="showResult">
+          <van-button
+            type="primary"
+            size="large"
+            round
+            @click="resetVote"
+            class="reset-btn"
+          >
+            🔄 返回
+          </van-button>
+        </div>
+      </template>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
+import { getDispute, joinDispute, submitVote, getResult } from '@/api'
 
 const router = useRouter()
+const route = useRoute()
 
-interface Option {
-  id: string
-  text: string
-  weight: number
-  percentage?: number
-  isWinner?: boolean
-}
+const disputeId = computed(() => route.params.id as string)
 
-const decision = reactive<{
-  title: string
-  description: string
-  options: Option[]
-}>({
-  title: '今天中午吃什么？',
-  description: '选择困难症犯了，大家来投票决定吧！',
-  options: [
-    { id: '1', text: '火锅', weight: 1 },
-    { id: '2', text: '烧烤', weight: 1 },
-    { id: '3', text: '日料', weight: 1 },
-    { id: '4', text: '川菜', weight: 2 }
-  ]
-})
-
-const participantName = ref('')
+const loading = ref(true)
+const error = ref('')
+const joinName = ref('')
+const isJoining = ref(false)
 const selectedOptionId = ref<string | null>(null)
 const isSubmitting = ref(false)
+const hasVoted = ref(false)
 const showResult = ref(false)
+const isCheckingResult = ref(false)
 
-const selectedOption = computed(() => {
-  return decision.options.find(opt => opt.id === selectedOptionId.value)
-})
+const dispute = ref<any>(null)
+const myParticipantId = ref<string | null>(null)
+const resultOptions = ref<any[]>([])
+
+const hasJoined = computed(() => !!myParticipantId.value)
 
 const canSubmit = computed(() => {
-  return participantName.value.trim() && selectedOptionId.value
-})
-
-const totalWeight = computed(() => {
-  if (!selectedOption.value) return 0
-  return selectedOption.value.weight
-})
-
-const totalPossibleWeight = computed(() => {
-  return decision.options.reduce((sum, opt) => sum + opt.weight, 0)
+  return hasJoined.value && selectedOptionId.value && !hasVoted.value
 })
 
 const sortedResults = computed(() => {
-  return [...decision.options].sort((a, b) => {
-    const aPct = a.percentage || 0
-    const bPct = b.percentage || 0
-    return bPct - aPct
-  })
+  return [...resultOptions.value].sort((a, b) => (b.percentage || 0) - (a.percentage || 0))
 })
 
 const winnerOption = computed(() => {
-  return decision.options.find(opt => opt.isWinner)
+  return resultOptions.value.find(opt => opt.isWinner)
 })
 
-const selectOption = (option: Option) => {
-  if (showResult.value) return
+const selectOption = (option: any) => {
+  if (showResult.value || hasVoted.value) return
   selectedOptionId.value = option.id
 }
 
@@ -190,9 +199,89 @@ const onBack = () => {
   router.back()
 }
 
+const loadDispute = async () => {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const data = await getDispute(disputeId.value)
+    dispute.value = data
+
+    // 检查是否已有结果
+    if (data.status === 'finished') {
+      try {
+        const resultData = await getResult(disputeId.value)
+        applyResult(resultData)
+      } catch {
+        // 忽略
+      }
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.message || '加载失败，请重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+const applyResult = (resultData: any) => {
+  showResult.value = true
+  hasVoted.value = true
+
+  if (resultData?.options) {
+    resultOptions.value = resultData.options.map((opt: any) => ({
+      id: opt.id,
+      text: opt.text,
+      percentage: opt.percentage || opt.totalWeight || 0,
+      isWinner: opt.isWinner || false
+    }))
+  } else if (resultData?.results) {
+    // 备用格式
+    const results = resultData.results
+    const total = Object.values(results).reduce((s: number, v: any) => s + Number(v), 0)
+    const maxVotes = Math.max(...Object.values(results).map(Number))
+    
+    resultOptions.value = (dispute.value?.options || []).map((opt: any) => {
+      const votes = Number(results[opt.id]) || 0
+      return {
+        id: opt.id,
+        text: opt.text,
+        percentage: total > 0 ? Math.round((votes / total) * 100) : 0,
+        isWinner: votes === maxVotes
+      }
+    })
+  }
+}
+
+const joinVote = async () => {
+  if (!joinName.value.trim()) {
+    showToast('请输入你的名字')
+    return
+  }
+
+  isJoining.value = true
+  showLoadingToast({ message: '加入中...', forbidClick: true })
+
+  try {
+    const data = await joinDispute(disputeId.value, { name: joinName.value.trim() })
+    dispute.value = data
+    
+    // 找到自己的 participantId（最后一个加入的）
+    const lastParticipant = data.participants[data.participants.length - 1]
+    myParticipantId.value = lastParticipant?.id
+
+    closeToast()
+    showToast('加入成功')
+  } catch (e: any) {
+    closeToast()
+    showToast(e.response?.data?.message || '加入失败')
+  } finally {
+    isJoining.value = false
+  }
+}
+
 const submitVote = async () => {
   if (!canSubmit.value) {
-    showToast('请填写名字并选择选项')
+    showToast('请选择一个选项')
     return
   }
 
@@ -200,52 +289,55 @@ const submitVote = async () => {
   showLoadingToast({ message: '投票中...', forbidClick: true })
 
   try {
-    // 模拟投票计算
-    await new Promise(resolve => setTimeout(resolve, 600))
-    
-    // 计算加权结果（模拟其他人的投票）
-    const votes = decision.options.map(opt => ({
-      ...opt,
-      votes: opt.id === selectedOptionId.value ? opt.weight : Math.floor(Math.random() * 5) + 1,
-      totalWeight: 0
-    }))
-
-    // 计算总权重
-    const total = votes.reduce((sum, v) => sum + v.votes * v.weight, 0)
-    
-    // 计算百分比
-    votes.forEach(v => {
-      v.percentage = Math.round((v.votes * v.weight / total) * 100)
+    await submitVote(disputeId.value, {
+      participantId: myParticipantId.value!,
+      optionId: selectedOptionId.value!
     })
 
-    // 更新选项数据
-    decision.options = votes.map(v => ({
-      id: v.id,
-      text: v.text,
-      weight: v.weight,
-      percentage: v.percentage,
-      isWinner: v.percentage === Math.max(...votes.map(x => x.percentage || 0))
-    }))
+    hasVoted.value = true
+    closeToast()
+    showToast('投票成功')
 
+    // 尝试获取结果
+    try {
+      await checkResult()
+    } catch {
+      // 还没出结果，等待
+    }
+  } catch (e: any) {
     closeToast()
-    showResult.value = true
-    showToast('投票成功！')
-  } catch {
-    closeToast()
-    showToast('投票失败，请重试')
+    showToast(e.response?.data?.message || '投票失败')
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const checkResult = async () => {
+  isCheckingResult.value = true
+
+  try {
+    const resultData = await getResult(disputeId.value)
+    applyResult(resultData)
+  } catch (e: any) {
+    showToast(e.response?.data?.message || '结果尚未公布，请稍后再试')
+  } finally {
+    isCheckingResult.value = false
   }
 }
 
 const resetVote = () => {
   selectedOptionId.value = null
   showResult.value = false
-  decision.options.forEach(opt => {
-    opt.percentage = undefined
-    opt.isWinner = undefined
-  })
+  hasVoted.value = false
+  resultOptions.value = []
+  myParticipantId.value = null
+  joinName.value = ''
+  loadDispute()
 }
+
+onMounted(() => {
+  loadDispute()
+})
 </script>
 
 <style scoped>
@@ -253,6 +345,16 @@ const resetVote = () => {
   min-height: 100vh;
   background: linear-gradient(180deg, #e8f4f8 0%, #f7f8fa 100%);
   padding-bottom: 100px;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
 }
 
 .decision-info {
@@ -273,13 +375,22 @@ const resetVote = () => {
   margin: 0;
 }
 
+.join-section {
+  padding: 20px;
+}
+
+.join-action {
+  padding: 16px 20px;
+}
+
+.join-btn {
+  height: 50px;
+  font-size: 18px;
+}
+
 .participant-section {
   padding: 0 20px;
   margin-bottom: 16px;
-}
-
-.participant-section :deep(.van-cell-group--inset) {
-  border-radius: 12px;
 }
 
 .options-section {
@@ -321,11 +432,6 @@ const resetVote = () => {
   background: linear-gradient(135deg, rgba(79, 172, 254, 0.05) 0%, rgba(0, 242, 254, 0.05) 100%);
 }
 
-.option-card.winner {
-  border-color: #ffd700;
-  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.05) 100%);
-}
-
 .option-content {
   flex: 1;
 }
@@ -334,12 +440,6 @@ const resetVote = () => {
   font-size: 18px;
   font-weight: 500;
   color: #323233;
-}
-
-.option-weight {
-  font-size: 12px;
-  color: #969799;
-  margin-top: 4px;
 }
 
 .option-check {
@@ -359,10 +459,13 @@ const resetVote = () => {
   color: #fff;
 }
 
-.option-card.winner .option-check {
-  background: #ffd700;
-  border-color: #ffd700;
-  color: #fff;
+.voted-notice {
+  padding: 16px 20px;
+  text-align: center;
+}
+
+.check-btn {
+  margin-top: 12px;
 }
 
 .result-section {
@@ -454,17 +557,6 @@ const resetVote = () => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
-}
-
-.vote-summary {
-  text-align: center;
-  margin-top: 16px;
-}
-
-.vote-summary p {
-  font-size: 14px;
-  color: #969799;
-  margin: 0;
 }
 
 .bottom-actions {

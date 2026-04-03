@@ -7,224 +7,220 @@
       @click-left="onBack"
     />
 
-    <!-- 争端标题 -->
-    <div class="dispute-title" v-if="disputeTitle">
-      <van-icon name="fire" />
-      <span>{{ disputeTitle }}</span>
+    <!-- Loading -->
+    <div v-if="loading" class="loading-container">
+      <van-loading size="48px">加载中...</van-loading>
     </div>
 
-    <!-- 模式选择 -->
-    <div class="mode-tabs">
-      <div
-        class="mode-tab"
-        :class="{ active: mode === 'dice' }"
-        @click="mode = 'dice'"
-      >
-        <van-icon name="tv-o" />
-        <span>摇骰子</span>
-      </div>
-      <div
-        class="mode-tab"
-        :class="{ active: mode === 'number' }"
-        @click="mode = 'number'"
-      >
-        <van-icon name="edit" />
-        <span>写数字</span>
-      </div>
+    <!-- 错误提示 -->
+    <div v-else-if="error" class="error-container">
+      <van-empty :description="error" />
+      <van-button type="primary" @click="loadDispute">重试</van-button>
     </div>
 
-    <!-- 参与者列表 -->
-    <div class="players-section">
-      <div class="section-header">
-        <h3>参与者 ({{ players.length }})</h3>
-        <van-button
-          size="small"
-          type="primary"
-          round
-          @click="addPlayer"
-          :disabled="players.length >= 10"
+    <template v-else>
+      <!-- 争端标题 -->
+      <div class="dispute-title" v-if="dispute?.title">
+        <van-icon name="fire" />
+        <span>{{ dispute.title }}</span>
+      </div>
+
+      <!-- 模式选择 -->
+      <div class="mode-tabs" v-if="!showResult">
+        <div
+          class="mode-tab"
+          :class="{ active: mode === 'dice' }"
+          @click="mode = 'dice'"
         >
-          <van-icon name="plus" /> 添加
+          <van-icon name="tv-o" />
+          <span>摇骰子</span>
+        </div>
+        <div
+          class="mode-tab"
+          :class="{ active: mode === 'number' }"
+          @click="mode = 'number'"
+        >
+          <van-icon name="edit" />
+          <span>写数字</span>
+        </div>
+      </div>
+
+      <!-- 参与者列表 -->
+      <div class="players-section">
+        <div class="section-header">
+          <h3>参与者 ({{ participants.length }})</h3>
+          <van-button
+            v-if="!showResult"
+            size="small"
+            type="primary"
+            round
+            @click="addPlayer"
+            :disabled="participants.length >= 10"
+          >
+            <van-icon name="plus" /> 添加
+          </van-button>
+        </div>
+
+        <!-- 添加玩家输入 -->
+        <div v-if="showAddPlayer" class="add-player-form">
+          <van-field
+            v-model="newPlayerName"
+            placeholder="输入新玩家名字"
+            clearable
+          />
+          <div class="add-player-actions">
+            <van-button size="small" @click="showAddPlayer = false">取消</van-button>
+            <van-button size="small" type="primary" :loading="isAdding" @click="confirmAddPlayer">确认</van-button>
+          </div>
+        </div>
+
+        <div class="players-list">
+          <div
+            v-for="(player, index) in participants"
+            :key="player.id"
+            class="player-item"
+            :class="{ winner: showResult && player.isWinner }"
+          >
+            <div class="player-rank" v-if="showResult">
+              {{ getRank(index) }}
+            </div>
+            <div class="player-avatar">
+              <van-icon name="user-o" />
+            </div>
+            <div class="player-info">
+              <span class="player-name">{{ player.name || '匿名参与者' }}</span>
+            </div>
+            <div class="player-result" v-if="showResult">
+              <div class="dice-display">{{ player.result ?? '?' }}</div>
+            </div>
+            <div class="player-choice" v-if="!showResult && player.choice != null">
+              <span class="choice-tag">已提交</span>
+            </div>
+            <div class="player-action" v-if="!showResult">
+              <van-button
+                size="mini"
+                type="primary"
+                :disabled="!!player.choice"
+                @click="submitPlayerChoice(player)"
+              >
+                {{ player.choice != null ? '已提交' : (mode === 'dice' ? '🎲 摇' : '✏️ 写') }}
+              </van-button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 摇骰子按钮（所有人提交后揭晓） -->
+      <div class="action-section" v-if="!showResult && participants.length >= 2">
+        <van-button
+          type="primary"
+          size="large"
+          round
+          :loading="isFetchingResult"
+          :disabled="!allSubmitted"
+          @click="fetchResult"
+          class="roll-btn"
+        >
+          {{ allSubmitted ? '🎲 揭晓结果' : `等待提交 (${submittedCount}/${participants.length})` }}
         </van-button>
       </div>
 
-      <div class="players-list">
-        <div
-          v-for="(player, index) in players"
-          :key="player.id"
-          class="player-item"
-          :class="{ winner: showResult && player.isWinner }"
-        >
-          <div class="player-rank" v-if="showResult">
-            {{ getRank(index) }}
-          </div>
-          <div class="player-avatar">
-            <van-icon name="user-o" />
-          </div>
-          <div class="player-info">
-            <van-field
-              v-model="player.name"
-              placeholder="参与者名字"
-              :disabled="showResult"
-              class="player-name-input"
-            />
-          </div>
-          <div class="player-result" v-if="showResult">
-            <div v-if="mode === 'dice'" class="dice-display" :class="{ rolling: isRolling }">
-              {{ player.result || '?' }}
-            </div>
-            <div v-else class="number-display">
-              {{ player.result || '-' }}
-            </div>
-          </div>
-          <div class="player-action" v-if="!showResult">
-            <van-icon
-              name="cross"
-              class="remove-btn"
-              @click="removePlayer(index)"
-            />
-          </div>
+      <!-- 结果排行榜 -->
+      <div class="result-section" v-if="showResult">
+        <div class="result-header">
+          <h3>🏆 最终结果</h3>
         </div>
-      </div>
-    </div>
-
-    <!-- 数字输入模式 -->
-    <div class="number-input-section" v-if="mode === 'number' && !showResult">
-      <van-notice-bar text="每人输入 1-100 的数字，数字最大者获胜" left-icon="info-o" />
-    </div>
-
-    <!-- 摇一摇按钮 -->
-    <div class="action-section" v-if="!showResult">
-      <van-button
-        type="primary"
-        size="large"
-        round
-        :loading="isRolling"
-        :disabled="players.length < 2 || !canStart"
-        @click="startRoll"
-        class="roll-btn"
-      >
-        <template v-if="isRolling">
-          摇啊摇...
-        </template>
-        <template v-else>
-          🎲 {{ mode === 'dice' ? '摇一摇' : '揭晓结果' }}
-        </template>
-      </van-button>
-    </div>
-
-    <!-- 结果排行榜 -->
-    <div class="result-section" v-if="showResult">
-      <div class="result-header">
-        <h3>🏆 最终结果</h3>
-      </div>
-      
-      <div class="leaderboard">
-        <div
-          v-for="(player, index) in sortedPlayers"
-          :key="player.id"
-          class="leaderboard-item"
-          :class="{
-            'gold': index === 0,
-            'silver': index === 1,
-            'bronze': index === 2
-          }"
-        >
-          <div class="rank-badge">
-            {{ index + 1 }}
-          </div>
-          <div class="player-name">
-            {{ player.name || '匿名参与者' }}
-          </div>
-          <div class="player-score">
-            <template v-if="mode === 'dice'">
+        
+        <div class="leaderboard">
+          <div
+            v-for="(player, index) in sortedPlayers"
+            :key="player.id"
+            class="leaderboard-item"
+            :class="{
+              'gold': index === 0,
+              'silver': index === 1,
+              'bronze': index === 2
+            }"
+          >
+            <div class="rank-badge">
+              {{ index + 1 }}
+            </div>
+            <div class="player-name">
+              {{ player.name || '匿名参与者' }}
+            </div>
+            <div class="player-score">
               🎲 {{ player.result }}
-            </template>
-            <template v-else>
-              {{ player.result }}
-            </template>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="winner-announcement">
-        🎊 {{ winnersText }} 获胜！
-      </div>
+        <div class="winner-announcement">
+          🎊 {{ winnersText }} 获胜！
+        </div>
 
-      <van-button
-        type="primary"
-        size="large"
-        round
-        @click="resetGame"
-        class="reset-btn"
-      >
-        🔄 再来一局
-      </van-button>
-    </div>
+        <van-button
+          type="primary"
+          size="large"
+          round
+          @click="resetGame"
+          class="reset-btn"
+        >
+          🔄 再来一局
+        </van-button>
+      </div>
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { showToast, showLoadingToast, closeToast } from 'vant'
+import { getDispute, joinDispute, submitPlay, getResult } from '@/api'
 
 const router = useRouter()
+const route = useRoute()
 
-const disputeTitle = ref('今晚吃什么？')
+const disputeId = computed(() => route.params.id as string)
+
+const loading = ref(true)
+const error = ref('')
 const mode = ref<'dice' | 'number'>('dice')
-const isRolling = ref(false)
+const showAddPlayer = ref(false)
+const newPlayerName = ref('')
+const isAdding = ref(false)
+const isFetchingResult = ref(false)
 const showResult = ref(false)
 
-interface Player {
+interface PlayerData {
   id: string
   name: string
-  result: number | null
+  choice?: any
+  result?: number
   isWinner?: boolean
 }
 
-const players = reactive<Player[]>([
-  { id: '1', name: '', result: null },
-  { id: '2', name: '', result: null }
-])
+const dispute = ref<any>(null)
+const participants = ref<PlayerData[]>([])
 
 const sortedPlayers = computed(() => {
-  return [...players].sort((a, b) => {
-    const aVal = a.result ?? -1
-    const bVal = b.result ?? -1
-    return bVal - aVal
-  })
+  return [...participants.value].sort((a, b) => (b.result ?? -1) - (a.result ?? -1))
 })
 
 const winnersText = computed(() => {
   const winners = sortedPlayers.value.filter(p => p.isWinner)
-  if (winners.length === 1) {
-    return winners[0].name || '参与者'
-  }
+  if (winners.length === 0) return ''
+  if (winners.length === 1) return winners[0].name || '参与者'
   return winners.map(w => w.name || '匿名').join('、')
 })
 
-const canStart = computed(() => {
-  return players.every(p => p.name.trim())
+const submittedCount = computed(() => {
+  return participants.value.filter(p => p.choice != null).length
 })
 
-const generateId = () => Math.random().toString(36).substring(2, 9)
-
-const addPlayer = () => {
-  if (players.length >= 10) {
-    showToast('最多10人参与')
-    return
-  }
-  players.push({ id: generateId(), name: '', result: null })
-}
-
-const removePlayer = (index: number) => {
-  if (players.length <= 2) {
-    showToast('至少需要2人')
-    return
-  }
-  players.splice(index, 1)
-}
+const allSubmitted = computed(() => {
+  return participants.value.length >= 2 && participants.value.every(p => p.choice != null)
+})
 
 const getRank = (index: number) => {
   const ranks = ['🥇', '🥈', '🥉']
@@ -235,62 +231,136 @@ const onBack = () => {
   router.back()
 }
 
-const rollDice = () => {
-  return Math.floor(Math.random() * 6) + 1
+const loadDispute = async () => {
+  loading.value = true
+  error.value = ''
+
+  try {
+    const data = await getDispute(disputeId.value)
+    dispute.value = data
+    participants.value = data.participants || []
+
+    // 检查是否已有结果
+    if (data.status === 'finished') {
+      try {
+        const resultData = await getResult(disputeId.value)
+        applyResult(resultData)
+      } catch {
+        // 忽略
+      }
+    }
+  } catch (e: any) {
+    error.value = e.response?.data?.message || '加载失败，请重试'
+  } finally {
+    loading.value = false
+  }
 }
 
-const startRoll = () => {
-  if (!canStart.value) {
-    showToast('请填写所有参与者名字')
+const applyResult = (resultData: any) => {
+  showResult.value = true
+  
+  if (resultData && resultData.players) {
+    // 后端返回的玩家结果
+    const maxVal = Math.max(...resultData.players.map((p: any) => p.result || 0))
+    participants.value = resultData.players.map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      result: p.result,
+      isWinner: p.result === maxVal
+    }))
+  } else if (resultData && resultData.results) {
+    const results = resultData.results
+    const maxVal = Math.max(...Object.values(results).map(Number))
+    participants.value = participants.value.map(p => ({
+      ...p,
+      result: Number(results[p.id]) || 0,
+      isWinner: Number(results[p.id]) === maxVal
+    }))
+  }
+}
+
+const addPlayer = () => {
+  showAddPlayer.value = true
+  newPlayerName.value = ''
+}
+
+const confirmAddPlayer = async () => {
+  if (!newPlayerName.value.trim()) {
+    showToast('请输入玩家名字')
     return
   }
 
-  isRolling.value = true
+  isAdding.value = true
 
-  // 模拟摇骰子动画
-  let rollCount = 0
-  const maxRolls = 15
-  const rollInterval = setInterval(() => {
-    players.forEach(p => {
-      if (mode.value === 'dice') {
-        p.result = Math.floor(Math.random() * 6) + 1
-      } else {
-        p.result = Math.floor(Math.random() * 100) + 1
-      }
-    })
-    rollCount++
-    
-    if (rollCount >= maxRolls) {
-      clearInterval(rollInterval)
-      
-      // 最终结果
-      players.forEach(p => {
-        if (mode.value === 'dice') {
-          p.result = rollDice()
-        } else {
-          p.result = Math.floor(Math.random() * 100) + 1
-        }
-      })
+  try {
+    const data = await joinDispute(disputeId.value, { name: newPlayerName.value.trim() })
+    dispute.value = data
+    participants.value = data.participants || []
+    showAddPlayer.value = false
+    showToast('添加成功')
+  } catch (e: any) {
+    showToast(e.response?.data?.message || '添加失败')
+  } finally {
+    isAdding.value = false
+  }
+}
 
-      // 计算获胜者
-      const maxResult = Math.max(...players.map(p => p.result || 0))
-      players.forEach(p => {
-        p.isWinner = p.result === maxResult
-      })
+const submitPlayerChoice = async (player: PlayerData) => {
+  if (player.choice != null) return
 
-      isRolling.value = false
-      showResult.value = true
+  showLoadingToast({ message: '提交中...', forbidClick: true })
+
+  try {
+    // 摇骰子模式自动生成随机数
+    let choice: number
+    if (mode.value === 'dice') {
+      choice = Math.floor(Math.random() * 6) + 1
+    } else {
+      choice = Math.floor(Math.random() * 100) + 1
     }
-  }, 80)
+
+    await submitPlay(disputeId.value, {
+      participantId: player.id,
+      choice
+    })
+
+    // 刷新数据
+    const data = await getDispute(disputeId.value)
+    dispute.value = data
+    participants.value = data.participants || []
+
+    closeToast()
+    showToast(`${player.name} 提交成功`)
+  } catch (e: any) {
+    closeToast()
+    showToast(e.response?.data?.message || '提交失败')
+  }
+}
+
+const fetchResult = async () => {
+  isFetchingResult.value = true
+  showLoadingToast({ message: '揭晓结果中...', forbidClick: true })
+
+  try {
+    const resultData = await getResult(disputeId.value)
+    applyResult(resultData)
+    closeToast()
+  } catch (e: any) {
+    closeToast()
+    showToast(e.response?.data?.message || '获取结果失败')
+  } finally {
+    isFetchingResult.value = false
+  }
 }
 
 const resetGame = () => {
-  players.forEach(p => {
-    p.result = null
-    p.isWinner = false
-  })
   showResult.value = false
+  loadDispute()
 }
+
+onMounted(() => {
+  loadDispute()
+})
 </script>
 
 <style scoped>
@@ -298,6 +368,16 @@ const resetGame = () => {
   min-height: 100vh;
   background: linear-gradient(180deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
   padding-bottom: 30px;
+}
+
+.loading-container,
+.error-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 16px;
 }
 
 .dispute-title {
@@ -353,6 +433,20 @@ const resetGame = () => {
   margin: 0;
 }
 
+.add-player-form {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.add-player-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 .players-list {
   display: flex;
   flex-direction: column;
@@ -395,12 +489,21 @@ const resetGame = () => {
   flex: 1;
 }
 
-.player-name-input :deep(.van-field__control) {
+.player-name {
   color: #fff;
+  font-weight: 500;
 }
 
-.player-name-input :deep(.van-field__control::placeholder) {
-  color: rgba(255, 255, 255, 0.5);
+.player-choice {
+  margin-right: 4px;
+}
+
+.choice-tag {
+  font-size: 12px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.15);
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .player-result {
@@ -412,37 +515,6 @@ const resetGame = () => {
   font-size: 32px;
   font-weight: bold;
   color: #ffd700;
-}
-
-.dice-display.rolling {
-  animation: roll 0.1s linear infinite;
-}
-
-@keyframes roll {
-  0% { transform: rotate(-10deg); }
-  50% { transform: rotate(10deg); }
-  100% { transform: rotate(-10deg); }
-}
-
-.number-display {
-  font-size: 24px;
-  font-weight: bold;
-  color: #4facfe;
-}
-
-.remove-btn {
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.5);
-  padding: 8px;
-  cursor: pointer;
-}
-
-.remove-btn:active {
-  color: #ff4b2b;
-}
-
-.number-input-section {
-  padding: 16px 20px;
 }
 
 .action-section {
@@ -529,12 +601,6 @@ const resetGame = () => {
 .leaderboard-item.bronze .rank-badge {
   background: #cd7f32;
   color: #fff;
-}
-
-.player-name {
-  flex: 1;
-  color: #fff;
-  font-weight: 500;
 }
 
 .player-score {

@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // 创建 axios 实例
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000/api',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
@@ -12,7 +12,6 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    // 可在此添加 token 等认证信息
     return config
   },
   (error) => {
@@ -26,7 +25,6 @@ api.interceptors.response.use(
     return response.data
   },
   (error) => {
-    // 统一错误处理
     const message = error.response?.data?.message || '网络请求失败'
     console.error('API Error:', message)
     return Promise.reject(error)
@@ -35,145 +33,95 @@ api.interceptors.response.use(
 
 export default api
 
-// ============ 争端相关接口 ============
+// ============ 类型定义 ============
+
+export interface Participant {
+  id: string
+  name: string
+  weight?: number
+  choice?: any
+}
+
+export interface DisputeOption {
+  id: string
+  text: string
+  weight?: number
+}
 
 export interface Dispute {
   id: string
   title: string
   description: string
-  type: 'battle' | 'dice' | 'vote'
-  mode?: string
+  type: 'luck_rps' | 'luck_dice' | 'decide'
   status: 'pending' | 'ongoing' | 'finished'
+  participants: Participant[]
+  options: DisputeOption[]
   createdAt: string
-  shareCode?: string
+  [key: string]: any
+}
+
+export interface DisputeResult {
+  winner?: string
+  description?: string
+  [key: string]: any
 }
 
 export interface CreateDisputeDto {
   title: string
-  description: string
-  type: 'battle' | 'dice' | 'vote'
-  mode?: string
+  description?: string
+  type: 'luck_rps' | 'luck_dice' | 'decide'
+  participantNames?: string[]
+  options?: string[]
 }
 
-// 获取争端列表
-export function getDisputes() {
-  return api.get<Dispute[]>('/disputes')
+export interface JoinDisputeDto {
+  name: string
+  weight?: number
+}
+
+export interface PlayDto {
+  participantId: string
+  choice: string | number
+}
+
+export interface VoteDto {
+  participantId: string
+  optionId: string
+}
+
+// ============ 争端相关接口 ============
+
+// 创建争端
+export function createDispute(data: CreateDisputeDto): Promise<Dispute> {
+  return api.post('/disputes', data)
 }
 
 // 获取争端详情
-export function getDispute(id: string) {
-  return api.get<Dispute>(`/disputes/${id}`)
+export function getDispute(id: string): Promise<Dispute> {
+  return api.get(`/disputes/${id}`)
 }
 
-// 创建争端
-export function createDispute(data: CreateDisputeDto) {
-  return api.post<Dispute>('/disputes', data)
+// 加入争端
+export function joinDispute(id: string, data: JoinDisputeDto): Promise<Dispute> {
+  return api.post(`/disputes/${id}/join`, data)
 }
 
-// 删除争端
-export function deleteDispute(id: string) {
-  return api.delete(`/disputes/${id}`)
+// 运气服人：提交选择
+export function submitPlay(id: string, data: PlayDto): Promise<any> {
+  return api.post(`/disputes/${id}/play`, data)
 }
 
-// ============ 运气服人 - 两人对决 ============
-
-export interface BattlePlayer {
-  id: string
-  name: string
-  choice: 'rock' | 'paper' | 'scissors' | null
+// 做决定：投票
+export function submitVote(id: string, data: VoteDto): Promise<any> {
+  return api.post(`/disputes/${id}/vote`, data)
 }
 
-export interface BattleResult {
-  player1: BattlePlayer
-  player2: BattlePlayer
-  winner: 1 | 2 | 0 // 0 表示平局
-  winningChoice: 'rock' | 'paper' | 'scissors'
+// 获取结果
+export function getResult(id: string): Promise<DisputeResult> {
+  return api.get(`/disputes/${id}/result`)
 }
 
-// 提交对决结果
-export function submitBattleResult(disputeId: string, player1Choice: string, player2Choice: string) {
-  return api.post<BattleResult>(`/disputes/${disputeId}/battle`, {
-    player1Choice,
-    player2Choice
-  })
-}
-
-// ============ 运气服人 - 多人比拼 ============
-
-export interface DicePlayer {
-  id: string
-  name: string
-  result: number | null
-  isWinner?: boolean
-}
-
-export interface DiceResult {
-  players: DicePlayer[]
-  winnerIds: string[]
-  maxValue: number
-}
-
-// 摇骰子
-export function rollDice(disputeId: string, results: { playerId: string; value: number }[]) {
-  return api.post<DiceResult>(`/disputes/${disputeId}/dice`, { results })
-}
-
-// ============ 做个决定 ============
-
-export interface DecideOption {
-  id: string
-  text: string
-  weight: number
-}
-
-export interface DecideVote {
-  optionId: string
-  weight: number
-}
-
-export interface DecideResult {
-  options: {
-    id: string
-    text: string
-    totalWeight: number
-    percentage: number
-  }[]
-  winner: string
-}
-
-// 创建决定
-export function createDecision(data: { title: string; description: string; options: DecideOption[] }) {
-  return api.post<Dispute & { options: DecideOption[] }>('/decisions', data)
-}
-
-// 获取决定详情
-export function getDecision(id: string) {
-  return api.get<Dispute & { options: DecideOption[] }>(`/decisions/${id}`)
-}
-
-// 投票
-export function submitVote(disputeId: string, vote: DecideVote) {
-  return api.post<DecideResult>(`/decisions/${disputeId}/vote`, vote)
-}
-
-// 获取投票结果
-export function getVoteResult(disputeId: string) {
-  return api.get<DecideResult>(`/decisions/${disputeId}/result`)
-}
-
-// ============ Mock 数据模拟 ============
-// 后端未完成时使用这些 mock 函数
-
-const mockDisputes: Dispute[] = []
-const mockDecisions: (Dispute & { options: DecideOption[] })[] = []
-
-// Mock: 生成分享链接
-export function generateShareLink(type: string, id: string) {
-  const baseUrl = window.location.origin
-  return `${baseUrl}/share/${type}/${id || Math.random().toString(36).substring(7)}`
-}
-
-// Mock: 获取历史记录
-export function getHistory() {
-  return Promise.resolve([...mockDisputes, ...mockDecisions])
+// 生成分享链接
+export function generateShareLink(path: string) {
+  return `${window.location.origin}${path}`
 }

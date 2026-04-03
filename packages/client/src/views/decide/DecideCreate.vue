@@ -47,7 +47,7 @@
         <div class="options-list">
           <div
             v-for="(option, index) in form.options"
-            :key="option.id"
+            :key="index"
             class="option-item"
           >
             <div class="option-number">{{ index + 1 }}</div>
@@ -63,7 +63,6 @@
                 min="1"
                 max="10"
                 integer
-                @change="onWeightChange"
               />
             </div>
             <van-icon
@@ -104,9 +103,11 @@
     <van-dialog
       v-model:show="showShareDialog"
       title="分享链接已生成"
-      confirm-button-text="复制链接"
-      cancel-button-text="关闭"
-      @confirm="copyLink"
+      :show-cancel-button="true"
+      confirm-button-text="前往参与页"
+      cancel-button-text="复制链接并关闭"
+      @confirm="goToPage"
+      @cancel="copyLink"
     >
       <div class="share-content">
         <p class="share-title">{{ form.title || '决定标题' }}</p>
@@ -114,7 +115,7 @@
         <div class="share-options">
           <h4>选项列表：</h4>
           <ul>
-            <li v-for="(opt, idx) in form.options" :key="opt.id">
+            <li v-for="(opt, idx) in form.options" :key="idx">
               {{ opt.text }} <span v-if="opt.weight > 1">(权重 ×{{ opt.weight }})</span>
             </li>
           </ul>
@@ -129,12 +130,12 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
-import { generateShareLink } from '@/api'
+import { createDispute, generateShareLink } from '@/api'
 
 const router = useRouter()
 
 interface Option {
-  id: string
+  id?: string
   text: string
   weight: number
 }
@@ -143,16 +144,15 @@ const form = reactive({
   title: '',
   description: '',
   options: [
-    { id: '1', text: '', weight: 1 },
-    { id: '2', text: '', weight: 1 }
+    { text: '', weight: 1 },
+    { text: '', weight: 1 }
   ] as Option[]
 })
 
 const isSubmitting = ref(false)
 const showShareDialog = ref(false)
 const shareLink = ref('')
-
-const generateId = () => Math.random().toString(36).substring(2, 9)
+const createdDisputeId = ref('')
 
 const canSubmit = computed(() => {
   const hasTitle = form.title.trim().length > 0
@@ -166,7 +166,7 @@ const addOption = () => {
     showToast('最多添加10个选项')
     return
   }
-  form.options.push({ id: generateId(), text: '', weight: 1 })
+  form.options.push({ text: '', weight: 1 })
 }
 
 const removeOption = (index: number) => {
@@ -175,10 +175,6 @@ const removeOption = (index: number) => {
     return
   }
   form.options.splice(index, 1)
-}
-
-const onWeightChange = () => {
-  // 权重变化时的回调
 }
 
 const onBack = () => {
@@ -195,20 +191,29 @@ const handleSubmit = async () => {
   showLoadingToast({ message: '生成中...', forbidClick: true })
 
   try {
-    // 模拟 API 调用
-    await new Promise(resolve => setTimeout(resolve, 800))
-    
-    const decisionId = generateId()
-    shareLink.value = generateShareLink('decide', decisionId)
-    
+    const result = await createDispute({
+      title: form.title,
+      description: form.description,
+      type: 'decide',
+      options: form.options.map(opt => opt.text)
+    })
+
+    createdDisputeId.value = result.id
+    shareLink.value = generateShareLink(`/decide/vote/${result.id}`)
+
     closeToast()
     showShareDialog.value = true
-  } catch {
+  } catch (e: any) {
     closeToast()
-    showToast('生成失败，请重试')
+    showToast(e.response?.data?.message || '生成失败，请重试')
   } finally {
     isSubmitting.value = false
   }
+}
+
+const goToPage = () => {
+  showShareDialog.value = false
+  router.push(`/decide/vote/${createdDisputeId.value}`)
 }
 
 const copyLink = async () => {

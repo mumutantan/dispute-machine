@@ -108,9 +108,11 @@
     <van-dialog
       v-model:show="showShareDialog"
       title="分享链接已生成"
-      confirm-button-text="复制链接"
-      cancel-button-text="关闭"
-      @confirm="copyLink"
+      :show-cancel-button="true"
+      confirm-button-text="前往参与页"
+      cancel-button-text="复制链接并关闭"
+      @confirm="goToPage"
+      @cancel="copyLink"
     >
       <div class="share-content">
         <p class="share-title">{{ form.title || '争端标题' }}</p>
@@ -125,7 +127,7 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast, showLoadingToast, closeToast } from 'vant'
-import { generateShareLink } from '@/api'
+import { createDispute, generateShareLink } from '@/api'
 
 const router = useRouter()
 
@@ -138,6 +140,7 @@ const form = reactive({
 const isSubmitting = ref(false)
 const showShareDialog = ref(false)
 const shareLink = ref('')
+const createdDisputeId = ref('')
 
 const onBack = () => {
   router.back()
@@ -153,19 +156,42 @@ const handleSubmit = async () => {
   showLoadingToast({ message: '生成中...', forbidClick: true })
 
   try {
-    // 模拟 API 调用
-    await new Promise(resolve => setTimeout(resolve, 800))
-    
-    const disputeId = Math.random().toString(36).substring(7)
-    shareLink.value = generateShareLink(form.mode, disputeId)
-    
+    const typeMap: Record<string, 'luck_rps' | 'luck_dice'> = {
+      'battle': 'luck_rps',
+      'dice': 'luck_dice'
+    }
+
+    const result = await createDispute({
+      title: form.title,
+      description: form.description,
+      type: typeMap[form.mode]
+    })
+
+    createdDisputeId.value = result.id
+
+    // 生成对应的分享链接
+    if (form.mode === 'battle') {
+      shareLink.value = generateShareLink(`/luck/battle/${result.id}`)
+    } else {
+      shareLink.value = generateShareLink(`/luck/dice/${result.id}`)
+    }
+
     closeToast()
     showShareDialog.value = true
-  } catch {
+  } catch (e: any) {
     closeToast()
-    showToast('生成失败，请重试')
+    showToast(e.response?.data?.message || '生成失败，请重试')
   } finally {
     isSubmitting.value = false
+  }
+}
+
+const goToPage = () => {
+  showShareDialog.value = false
+  if (form.mode === 'battle') {
+    router.push(`/luck/battle/${createdDisputeId.value}`)
+  } else {
+    router.push(`/luck/dice/${createdDisputeId.value}`)
   }
 }
 

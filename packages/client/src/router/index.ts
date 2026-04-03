@@ -19,7 +19,7 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/luck/battle',
+    path: '/luck/battle/:id',
     name: 'LuckBattle',
     component: () => import('@/views/luck/LuckBattle.vue'),
     meta: {
@@ -27,7 +27,7 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/luck/dice',
+    path: '/luck/dice/:id',
     name: 'LuckDice',
     component: () => import('@/views/luck/LuckDice.vue'),
     meta: {
@@ -43,7 +43,7 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
-    path: '/decide/vote',
+    path: '/decide/vote/:id',
     name: 'DecideVote',
     component: () => import('@/views/decide/DecideVote.vue'),
     meta: {
