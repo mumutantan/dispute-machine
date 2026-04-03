@@ -9,6 +9,46 @@ const routes: RouteRecordRaw[] = [
     meta: {
       title: '首页'
     }
+  },
+  {
+    path: '/luck',
+    name: 'LuckCreate',
+    component: () => import('@/views/luck/LuckCreate.vue'),
+    meta: {
+      title: '运气服人'
+    }
+  },
+  {
+    path: '/luck/battle',
+    name: 'LuckBattle',
+    component: () => import('@/views/luck/LuckBattle.vue'),
+    meta: {
+      title: '两人对决'
+    }
+  },
+  {
+    path: '/luck/dice',
+    name: 'LuckDice',
+    component: () => import('@/views/luck/LuckDice.vue'),
+    meta: {
+      title: '多人比拼'
+    }
+  },
+  {
+    path: '/decide',
+    name: 'DecideCreate',
+    component: () => import('@/views/decide/DecideCreate.vue'),
+    meta: {
+      title: '做个决定'
+    }
+  },
+  {
+    path: '/decide/vote',
+    name: 'DecideVote',
+    component: () => import('@/views/decide/DecideVote.vue'),
+    meta: {
+      title: '投票'
+    }
   }
 ]
 

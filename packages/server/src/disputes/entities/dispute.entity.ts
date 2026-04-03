@@ -1,63 +1,82 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn
-} from 'typeorm'
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 /**
- * 争端类型枚举
+ * 争端响应实体（Swagger 文档用）
  */
-export enum DisputeType {
-  DECISION = 'decision',    // 决策类
-  VOTING = 'voting',        // 投票类
-  DISCUSSION = 'discussion' // 讨论类
-}
-
-/**
- * 争端状态枚举
- */
-export enum DisputeStatus {
-  PENDING = 'pending',     // 待处理
-  ACTIVE = 'active',       // 进行中
-  RESOLVED = 'resolved',   // 已解决
-  CLOSED = 'closed'        // 已关闭
-}
-
-@Entity('disputes')
-export class Dispute {
-  @PrimaryGeneratedColumn('uuid')
+export class DisputeEntity {
+  @ApiProperty()
   id: string
 
-  @Column({ length: 200, comment: '争端标题' })
+  @ApiProperty()
   title: string
 
-  @Column({ type: 'text', nullable: true, comment: '争端描述' })
+  @ApiProperty()
   description: string
 
-  @Column({
-    type: 'enum',
-    enum: DisputeType,
-    default: DisputeType.DISCUSSION,
-    comment: '争端类型'
-  })
-  type: DisputeType
+  @ApiProperty()
+  type: string
 
-  @Column({
-    type: 'enum',
-    enum: DisputeStatus,
-    default: DisputeStatus.PENDING,
-    comment: '争端状态'
-  })
-  status: DisputeStatus
+  @ApiProperty()
+  status: string
 
-  @Column({ type: 'json', nullable: true, comment: '额外配置' })
-  options: Record<string, unknown>
+  @ApiProperty()
+  config: any
 
-  @CreateDateColumn({ comment: '创建时间' })
-  createdAt: Date
+  @ApiProperty()
+  result: any
 
-  @UpdateDateColumn({ comment: '更新时间' })
-  updatedAt: Date
+  @ApiProperty()
+  created_at: string
+
+  @ApiPropertyOptional()
+  finished_at: string | null
+
+  @ApiProperty({ type: [Object] })
+  participants: any[]
+
+  @ApiProperty({ type: [Object] })
+  options: any[]
+}
+
+/**
+ * 参与方实体
+ */
+export class ParticipantEntity {
+  @ApiProperty()
+  id: string
+
+  @ApiProperty()
+  dispute_id: string
+
+  @ApiProperty()
+  name: string
+
+  @ApiProperty()
+  role: string
+
+  @ApiProperty()
+  weight: number
+
+  @ApiProperty()
+  choice: string
+
+  @ApiProperty()
+  is_winner: number
+
+  @ApiProperty()
+  created_at: string
+}
+
+/**
+ * 选项实体
+ */
+export class OptionEntity {
+  @ApiProperty()
+  id: string
+
+  @ApiProperty()
+  dispute_id: string
+
+  @ApiProperty()
+  content: string
 }

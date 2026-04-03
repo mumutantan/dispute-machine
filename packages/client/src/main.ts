@@ -15,7 +15,10 @@ import {
   TabbarItem,
   Icon,
   Toast,
-  Dialog
+  Dialog,
+  NoticeBar,
+  Dialog as VanDialog,
+  Stepper
 } from 'vant'
 
 // Vant 样式
@@ -38,6 +41,8 @@ app.use(TabbarItem)
 app.use(Icon)
 app.use(Toast)
 app.use(Dialog)
+app.use(NoticeBar)
+app.use(Stepper)
 
 app.use(createPinia())
 app.use(router)

@@ -1,16 +1,29 @@
 <template>
-  <div class="app-container">
+  <div id="app">
     <router-view />
   </div>
 </template>
 
 <script setup lang="ts">
-// App 根组件
+// App.vue - 争端分歧机
 </script>
 
-<style scoped>
-.app-container {
+<style>
+/* 全局样式重置 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
   min-height: 100vh;
-  background-color: #f7f8fa;
+  background: #f7f8fa;
 }
 </style>
