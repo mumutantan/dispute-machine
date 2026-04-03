@@ -51,6 +51,11 @@
         </div>
       </div>
 
+      <!-- 提示 -->
+      <div class="tip-bar" v-if="dispute?.participants?.length >= 2 && !showResult">
+        <van-notice-bar text="请两位玩家各自在自己区域选择手势" left-icon="info-o" />
+      </div>
+
       <!-- 对决区域 -->
       <div class="battle-area" v-else>
         <!-- 玩家1 -->
@@ -66,16 +71,19 @@
               class="choice-btn"
               :class="{
                 active: player1Choice === choice.value,
-                disabled: hasSubmitted && player1Choice !== choice.value
+                disabled: !!player1Choice
               }"
-              @click="selectChoice(choice.value)"
+              @click="selectChoice(0, choice.value)"
             >
               <span class="choice-emoji">{{ choice.emoji }}</span>
               <span class="choice-text">{{ choice.label }}</span>
             </div>
           </div>
           <div v-if="player1Choice" class="selected-choice">
-            已选择: {{ getChoiceName(player1Choice) }}
+            已选择: {{ getChoiceEmoji(player1Choice) }} {{ getChoiceName(player1Choice) }}
+          </div>
+          <div v-else class="waiting-choice">
+            等待选择...
           </div>
         </div>
 
@@ -97,16 +105,19 @@
               class="choice-btn"
               :class="{
                 active: player2Choice === choice.value,
-                disabled: hasSubmitted && player2Choice !== choice.value
+                disabled: !!player2Choice
               }"
-              @click="selectChoice(choice.value)"
+              @click="selectChoice(1, choice.value)"
             >
               <span class="choice-emoji">{{ choice.emoji }}</span>
               <span class="choice-text">{{ choice.label }}</span>
             </div>
           </div>
           <div v-if="player2Choice" class="selected-choice">
-            已选择: {{ getChoiceName(player2Choice) }}
+            已选择: {{ getChoiceEmoji(player2Choice) }} {{ getChoiceName(player2Choice) }}
+          </div>
+          <div v-else class="waiting-choice">
+            等待选择...
           </div>
         </div>
       </div>
@@ -271,17 +282,26 @@ const joinGame = async () => {
   }
 }
 
-const selectChoice = async (choice: string) => {
+const selectChoice = async (playerIndex: number, choice: string) => {
   if (showResult.value) return
   if (!dispute.value?.participants || dispute.value.participants.length < 2) {
     showToast('等待更多玩家加入')
     return
   }
 
-  // 确定是哪个玩家
-  const myIndex = 0 // 简单假设第一个是当前玩家
-  const participantId = dispute.value.participants[myIndex]?.id
+  // 根据 playerIndex 确定是哪个玩家
+  const participantId = dispute.value.participants[playerIndex]?.id
   if (!participantId) return
+
+  // 检查该玩家是否已选择
+  if (playerIndex === 0 && player1Choice.value) {
+    showToast('你已经选择过了')
+    return
+  }
+  if (playerIndex === 1 && player2Choice.value) {
+    showToast('你已经选择过了')
+    return
+  }
 
   showLoadingToast({ message: '提交中...', forbidClick: true })
 
@@ -292,26 +312,31 @@ const selectChoice = async (choice: string) => {
     })
 
     // 更新本地状态
-    if (myIndex === 0) {
+    if (playerIndex === 0) {
       player1Choice.value = choice as 'rock' | 'scissors' | 'paper'
     } else {
       player2Choice.value = choice as 'rock' | 'scissors' | 'paper'
     }
 
-    // 刷新数据
-    const data = await getDispute(disputeId.value)
-    dispute.value = data
-    player1Choice.value = data.participants[0]?.choice || null
-    player2Choice.value = data.participants[1]?.choice || null
-
-    // 双方都选了，获取结果
-    if (player1Choice.value && player2Choice.value) {
-      const resultData = await getResult(disputeId.value)
-      result.value = resultData
-      showResult.value = true
-    }
-
     closeToast()
+
+    // 双方都选了，自动获取结果
+    const p1Choice = playerIndex === 0 ? choice : player1Choice.value
+    const p2Choice = playerIndex === 1 ? choice : player2Choice.value
+    if (p1Choice && p2Choice) {
+      showLoadingToast({ message: '揭晓结果...', forbidClick: true })
+      try {
+        const resultData = await getResult(disputeId.value)
+        result.value = resultData
+        showResult.value = true
+        closeToast()
+      } catch (e: any) {
+        closeToast()
+        showToast('获取结果失败')
+      }
+    } else {
+      showToast('已提交，等待对方...')
+    }
   } catch (e: any) {
     closeToast()
     showToast(e.response?.data?.message || '提交失败')
@@ -365,6 +390,10 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+}
+
+.tip-bar {
+  padding: 0 12px;
 }
 
 .join-section {
@@ -451,7 +480,13 @@ onMounted(() => {
 .selected-choice {
   margin-top: 12px;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 215, 0, 0.9);
+}
+
+.waiting-choice {
+  margin-top: 12px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .vs-section {
