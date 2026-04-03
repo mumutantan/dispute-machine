@@ -1,0 +1,18 @@
+{
+  "name": "dispute-machine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "争端分歧机 - Monorepo 项目",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@dispute-machine/client & npm run start:dev --workspace=@dispute-machine/server",
+    "build": "npm run build --workspace=@dispute-machine/client && npm run build --workspace=@dispute-machine/server",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
