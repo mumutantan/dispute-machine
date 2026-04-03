@@ -57,11 +57,12 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config)
   SwaggerModule.setup('api/docs', app, document)
 
-  // 启动服务
-  const port = process.env.PORT || 3000
-  await app.listen(port)
-  console.log(`🚀 服务已启动: http://localhost:${port}`)
-  console.log(`📚 API 文档: http://localhost:${port}/api/docs`)
+  // 启动服务（监听 0.0.0.0 以支持远程访问）
+  const port = process.env.PORT || 60002
+  await app.listen(port, '0.0.0.0')
+  console.log(`🚀 服务已启动: http://0.0.0.0:${port}`)
+  console.log(`🌐 远程访问: http://mxt-2.hndl.vip`)
+  console.log(`📚 API 文档: http://mxt-2.hndl.vip/api/docs`)
 }
 
 bootstrap().catch(e => {
